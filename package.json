@@ -1,0 +1,24 @@
+{
+  "name": "llm-calculator",
+  "version": "1.0.0",
+  "description": "Full-stack LLM-powered smart calculator with safe math execution and token/cost tracking",
+  "private": true,
+  "main": "server/src/server.js",
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,magenta \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "npm --prefix server run dev",
+    "dev:client": "npm --prefix client run dev",
+    "install:all": "npm install && npm --prefix server install && npm --prefix client install",
+    "build": "npm --prefix client run build",
+    "start": "npm --prefix server start",
+    "lint": "echo \"(add ESLint per workspace if needed)\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  },
+  "engines": {
+    "node": ">=18.17.0"
+  },
+  "author": "",
+  "license": "ISC"
+}
