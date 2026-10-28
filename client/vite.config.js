@@ -21,7 +21,7 @@ export default defineConfig({
     strictPort: true,   // fail loudly if 5173 is taken — better than silently switching to 5174 and breaking CLIENT_ORIGIN
     proxy: {
       '/api': {
-        target: 'http://localhost:5000',
+        target: 'https://llmcalculator.onrender.com',
         changeOrigin: true,
       },
     },

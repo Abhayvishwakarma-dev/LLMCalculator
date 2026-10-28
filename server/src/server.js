@@ -18,12 +18,6 @@ import { notFound, errorHandler } from './middleware/index.js';
 
 /* ------------------------------------------------------------------ *
  * Validate required env vars before anything else — fail fast.
- *
- * MONGODB_URI is always required.
- * For the AI provider, either GEMINI_API_KEY (free) or OPENAI_API_KEY
- * (paid) must be present. `config/openai.js` already resolved the
- * provider and will have thrown at import time if neither was set —
- * but we re-check here so the error message points to the right fix.
  * ------------------------------------------------------------------ */
 const missing = ['MONGODB_URI'].filter((k) => !process.env[k]);
 if (missing.length) {
@@ -35,6 +29,21 @@ if (!process.env.GEMINI_API_KEY && !process.env.OPENAI_API_KEY) {
   console.error('❌ Set GEMINI_API_KEY (free, no card) or OPENAI_API_KEY in server/.env');
   console.error('   Gemini key: https://aistudio.google.com/app/apikey');
   process.exit(1);
+}
+
+/* ------------------------------------------------------------------ *
+ * Platform detection & production warnings
+ * Render automatically sets RENDER=true and RENDER_EXTERNAL_URL.
+ * ------------------------------------------------------------------ */
+const IS_RENDER = process.env.RENDER === 'true' || Boolean(process.env.RENDER_EXTERNAL_URL);
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+
+if (IS_RENDER && !IS_PRODUCTION) {
+  console.warn(
+    '⚠️  Running on Render but NODE_ENV is not "production".\n' +
+    '   → Error responses will leak stack traces. Set NODE_ENV=production\n' +
+    '     in the Render dashboard (Environment tab).'
+  );
 }
 
 /* ------------------------------------------------------------------ *
@@ -53,6 +62,29 @@ app.use(cors({
 
 app.use(express.json({ limit: '10kb' })); // cap body size
 
+/* ------------------------------------------------------------------ *
+ * Root route — returns 200 so Render's HTTP health check passes and
+ * visitors to the bare URL see a useful payload instead of a 404.
+ *
+ * `app.get` also handles HEAD requests (Express maps them to GET
+ * routes automatically per RFC 7231), so both `GET /` and `HEAD /`
+ * succeed — no more `404 HEAD /` in the logs.
+ * ------------------------------------------------------------------ */
+app.get('/', (req, res) => {
+  res.json({
+    name: 'LLM Calculator API',
+    status: 'running',
+    env: IS_PRODUCTION ? 'production' : 'development',
+    uptime: Math.round(process.uptime()),
+    endpoints: {
+      health: '/api/health',
+      calculate: 'POST /api/calculations',
+      history: '/api/calculations/history',
+      usage: '/api/calculations/usage',
+    },
+  });
+});
+
 // All API routes live under /api
 app.use('/api', apiRouter);
 
@@ -70,12 +102,18 @@ const start = async () => {
     await connectDatabase();
 
     const server = app.listen(PORT, () => {
-      console.log(`🚀 Server listening on http://localhost:${PORT}`);
-      console.log(`   API base:  http://localhost:${PORT}/api`);
-      console.log(`   Health:    http://localhost:${PORT}/api/health`);
-      console.log(`   Provider:  ${AI_PROVIDER}`);
-      console.log(`   Model:     ${MODEL_CONFIG.model}`);
-      console.log(`   Env:       ${process.env.NODE_ENV || 'development'}`);
+      // On Render, RENDER_EXTERNAL_URL holds the public https URL.
+      // Locally it's absent, so fall back to localhost.
+      const publicUrl = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
+
+      console.log(`🚀 Server listening on port ${PORT}`);
+      console.log(`   Public URL: ${publicUrl}`);
+      console.log(`   API base:   ${publicUrl}/api`);
+      console.log(`   Health:     ${publicUrl}/api/health`);
+      console.log(`   Provider:   ${AI_PROVIDER}`);
+      console.log(`   Model:      ${MODEL_CONFIG.model}`);
+      console.log(`   Env:        ${process.env.NODE_ENV || 'development'}`);
+      if (IS_RENDER) console.log('   Platform:   Render');
     });
 
     /* ── Graceful shutdown ─────────────────────────────────────── */
